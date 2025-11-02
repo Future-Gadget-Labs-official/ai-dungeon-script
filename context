@@ -1,0 +1,24 @@
+// === CONTEXT MODIFIER ===
+function modifier(args){
+  var context = (args && typeof args.context==="string") ? args.context : "";
+  ensurePlayer();
+
+  var def = getPowerDef();
+  var baseNote = "Keep prose tight and cinematic; show actions and consequences. Respect player agency.";
+  var powerNote = def ? (" Protagonist wields " + def.name + "; reflect presence and limits in scenes.") : "";
+  var hardNote = state.player.hardMode ? " Encounters are dangerous; injuries have consequences." : "";
+  state.memory = state.memory || {};
+  state.memory.authorsNote = (baseNote + powerNote + hardNote).trim();
+
+  var hud = "[HUD] " + briefStats();
+  if (context.slice(-hud.length) !== hud){
+    context = (context.length ? (context + "\n") : "") + hud;
+  }
+
+  var maxChars = (args && args.info && typeof args.info.maxChars === "number") ? args.info.maxChars : null;
+  if (maxChars && context.length > maxChars){
+    context = context.slice(context.length - maxChars);
+  }
+
+  return { context:context, state:state };
+
