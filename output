@@ -1,0 +1,7 @@
+// === OUTPUT MODIFIER ===
+function modifier(args){
+  var text = (args && typeof args.text==="string") ? args.text : "";
+  if (state.flash){ text += "\n\n[System] " + state.flash; state.flash = ""; }
+  text = text.replace(/\s+$/,"");
+  text = text.replace(/\b(\w+)(\s+\1){2,}\b/gi, "$1 $1");
+  return { text:text, state:state };
