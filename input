@@ -1,0 +1,52 @@
+function modifier(args){
+  var text = (args && typeof args.text==="string") ? args.text : "";
+  ensurePlayer();
+
+  if (text === "/stats"){
+    state.message = "[Stats] " + briefStats();
+    return { text:"", state:state };
+  }
+
+  if (text === "/power"){
+    var def = getPowerDef();
+    state.message = def
+      ? ("Power: " + def.name + "\nPassive: " + def.passive + "\nSkills: " + (state.player.skills.join(", ") || "None"))
+      : "No power.";
+    return { text:"", state:state };
+  }
+
+  if (text === "/reroll"){
+    var before = state.player.power ? state.player.power.name : "-";
+    rerollPower();
+    var after = state.player.power ? state.player.power.name : "-";
+    state.message = "Rerolled: " + before + " -> " + after;
+    return { text:"", state:state };
+  }
+
+  var mx = text.match(/^\/gainxp\s+(\d+)$/);
+  if (mx){
+    var amt = clamp(parseInt(mx[1],10)||0, 0, 999999);
+    gainXP(amt);
+    state.message = "+" + amt + " XP. " + briefStats();
+    return { text:"", state:state };
+  }
+
+  if (text === "/hardmode on"){
+    state.player.hardMode = true;
+    state.message = "Hard Mode enabled.";
+    return { text:"", state:state };
+  }
+  if (text === "/hardmode off"){
+    state.player.hardMode = false;
+    state.message = "Hard Mode disabled.";
+    return { text:"", state:state };
+  }
+
+  if (text && text.charAt(0) !== "/"){
+    var lenBonus = clamp(Math.floor(text.length / DRIP_LEN_STEP), 0, DRIP_LEN_CAP);
+    var base = DRIP_BASE_MIN + randInt(DRIP_BASE_MAX - DRIP_BASE_MIN + 1);
+    gainXP(base + lenBonus);
+  }
+
+  return { text:text, state:state };
+
