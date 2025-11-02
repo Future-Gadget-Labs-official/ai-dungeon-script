@@ -1,0 +1,181 @@
+// === SHARED LIBRARY ===
+function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
+function randInt(n){ return Math.floor(Math.random() * n); }
+function choice(arr){ return arr[randInt(arr.length)]; }
+
+var XP_START_NEXT = 12;
+var XP_GROWTH     = 1.5;
+var XP_GROWTH_ADD = 5;
+var DRIP_BASE_MIN = 1;
+var DRIP_BASE_MAX = 2;
+var DRIP_LEN_STEP = 60;
+var DRIP_LEN_CAP  = 2;
+
+var POWERS = [
+  {
+    id: "pyro",
+    name: "Pyrokinesis",
+    summary: "You command living flame; heat obeys your will.",
+    tiers: [
+      { level: 3, skill: "Kindle",       desc: "Ignite small flames; minor heat shaping." },
+      { level: 5, skill: "Conflagrate",  desc: "Release a short, focused burst of fire." },
+      { level: 8, skill: "Phoenix Veil", desc: "Wreathe yourself in fire; ward harm." }
+    ],
+    passive: "Warm aura; resistant to cold and minor fire."
+  },
+  {
+    id: "chrono",
+    name: "Chrono Blink",
+    summary: "You slip between instants; short-range time shunts.",
+    tiers: [
+      { level: 3, skill: "Blink",        desc: "Teleport a few paces by skipping an instant." },
+      { level: 5, skill: "Afterimage",   desc: "Leave a time-echo that confuses foes." },
+      { level: 8, skill: "Moment Lock",  desc: "Freeze a small object or trap for a heartbeat." }
+    ],
+    passive: "Heightened reaction to sudden threats."
+  },
+  {
+    id: "shadow",
+    name: "Shadowstep",
+    summary: "You merge with darkness; distance folds where light thins.",
+    tiers: [
+      { level: 3, skill: "Step Between", desc: "Move between nearby shadows silently." },
+      { level: 5, skill: "Umbral Grasp", desc: "Tether a target with living shade." },
+      { level: 8, skill: "Night Mantle", desc: "Shroud allies; dampen sound and sight." }
+    ],
+    passive: "Eyes adjust instantly; footsteps soften."
+  },
+  {
+    id: "biotic",
+    name: "Biotic Shield",
+    summary: "Your will condenses force; barriers blossom from thin air.",
+    tiers: [
+      { level: 3, skill: "Ward",    desc: "Raise a small, directional barrier." },
+      { level: 5, skill: "Bulwark", desc: "Brief full-body shield; staggers on break." },
+      { level: 8, skill: "Aegis",   desc: "Protect a small group for moments." }
+    ],
+    passive: "Subtle kinetic buffer reduces minor harm."
+  },
+  {
+    id: "techno",
+    name: "Technomancy",
+    summary: "Devices whisper their secrets; code feels like clay.",
+    tiers: [
+      { level: 3, skill: "Jury-Rig",    desc: "Coax broken tech to life, briefly." },
+      { level: 5, skill: "Overclock",   desc: "Push a device beyond spec at a risk." },
+      { level: 8, skill: "Wire Ghost",  desc: "Remote nudge simple systems." }
+    ],
+    passive: "Intuitive sense for power, signals, and faults."
+  },
+  {
+    id: "beast",
+    name: "Beast Tongue",
+    summary: "The wild understands you; instincts braid with thought.",
+    tiers: [
+      { level: 3, skill: "Whisper",    desc: "Soothe or startle small beasts." },
+      { level: 5, skill: "Pack Call",  desc: "Summon or gain help from nearby animals." },
+      { level: 8, skill: "Totem Bond", desc: "Temporarily borrow an animal trait." }
+    ],
+    passive: "Heightened smell and hearing; animals hesitate to attack."
+  }
+];
+
+function ensurePlayer() {
+  state.player = state.player || {
+    level: 1,
+    xp: 0,
+    next: XP_START_NEXT,
+    rerolls: 1,
+    power: null,
+    skills: [],
+    wiIndex: null,
+    hardMode: false
+  };
+  if (!state.player.power) assignRandomPower();
+  if (!Array.isArray(state.player.skills)) state.player.skills = [];
+}
+
+function assignRandomPower() {
+  var p = choice(POWERS);
+  state.player.power = { id: p.id, name: p.name, passive: p.passive };
+  state.player.skills = [];
+  state.flash = "A latent gift awakens: " + p.name + ".";
+  applyUnlocks();
+  updateWorldInfo();
+}
+
+function rerollPower() {
+  if (state.player.rerolls <= 0) { state.flash = "No rerolls remaining."; return; }
+  state.player.rerolls -= 1;
+  assignRandomPower();
+}
+
+function getPowerDef() {
+  if (!state.player || !state.player.power) return null;
+  for (var i=0;i<POWERS.length;i++){ if (POWERS[i].id === state.player.power.id) return POWERS[i]; }
+  return null;
+}
+
+function hasSkill(name){
+  for (var i=0;i<state.player.skills.length;i++){ if (state.player.skills[i] === name) return true; }
+  return false;
+}
+
+function applyUnlocks() {
+  var def = getPowerDef(); if (!def) return;
+  var unlockedNow = [];
+  for (var i=0;i<def.tiers.length;i++){
+    var t = def.tiers[i];
+    if (state.player.level >= t.level && !hasSkill(t.skill)){
+      state.player.skills.push(t.skill);
+      unlockedNow.push(t.skill);
+    }
+  }
+  if (unlockedNow.length){
+    var note = "Unlocked: " + unlockedNow.join(", ") + ".";
+    state.flash = state.flash ? (state.flash + " " + note) : note;
+  }
+  updateWorldInfo();
+}
+
+function gainXP(n) {
+  n = clamp(n|0, 0, 999999);
+  state.player.xp += n;
+  var leveled = false;
+  while (state.player.xp >= state.player.next) {
+    state.player.xp -= state.player.next;
+    state.player.level += 1;
+    state.player.next = Math.round(state.player.next * XP_GROWTH) + XP_GROWTH_ADD;
+    leveled = true;
+  }
+  if (leveled) {
+    var msg = "Level " + state.player.level + " achieved.";
+    state.flash = state.flash ? (state.flash + " " + msg) : msg;
+    applyUnlocks();
+  }
+}
+
+function briefStats() {
+  var p = state.player, def = getPowerDef();
+  var skills = p.skills.length ? p.skills.join(", ") : "-";
+  return "LV " + p.level + " | XP " + p.xp + "/" + p.next + " | Power: " + (def ? def.name : "-") + " | Skills: " + skills;
+}
+
+function updateWorldInfo() {
+  var p = state.player, def = getPowerDef();
+  if (!def) return;
+  var keys = [p.power.name.toLowerCase(), "power", "gift", "ability"];
+  var text =
+    p.power.name + ": " + def.summary + "\n" +
+    "Passive: " + p.power.passive + "\n" +
+    "Level " + p.level + " — Skills: " + (p.skills.length ? p.skills.join(", ") : "None yet.");
+  if (typeof addWorldEntry === "function") {
+    if (p.wiIndex == null) {
+      p.wiIndex = addWorldEntry(keys, text);
+    } else if (typeof updateWorldEntry === "function") {
+      updateWorldEntry(p.wiIndex, keys, text);
+    }
+  }
+}
+
+if (!state.__powersys_init) { state.__powersys_init = true; ensurePlayer(); }
